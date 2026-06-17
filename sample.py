@@ -4,6 +4,7 @@ from meanflow.model import MeanFlowUNet
 from meanflow.utils import plot_original_vs_generated
 from meanflow.data import load_imagenette, make_three_image_dataset, make_dataloader
 
+from torchvision import datasets, transforms
 
 @torch.no_grad()
 def generate_meanflow_samples(model, num_samples, device, y=None):
@@ -35,10 +36,11 @@ def main():
         torch.load("checkpoints/meanflow_3_image_overfit.pt", map_location=device)
     )
 
-    full_dataset = load_imagenette(
-        root="./data/imagenette2-160/train",
+    train_data, transform = load_imagenette(
         image_size=32,
-    )
+    ) 
+    
+    full_dataset = datasets.ImageFolder(root=train_data, transform=transform)
 
     three_image_dataset, _, _ = make_three_image_dataset(full_dataset)
 

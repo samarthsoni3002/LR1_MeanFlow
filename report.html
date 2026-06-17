@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>MeanFlow Report</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 900px;
+      margin: 40px auto;
+      line-height: 1.6;
+      color: #222;
+    }
+    h1, h2, h3 {
+      color: #111;
+    }
+    code {
+      background: #f2f2f2;
+      padding: 2px 5px;
+      border-radius: 4px;
+    }
+    pre {
+      background: #f5f5f5;
+      padding: 12px;
+      overflow-x: auto;
+      border: 1px solid #ddd;
+    }
+    img {
+      max-width: 100%;
+      border: 1px solid #ddd;
+      margin-top: 10px;
+      margin-bottom: 18px;
+    }
+    .note {
+      background: #f7f7f7;
+      border-left: 4px solid #999;
+      padding: 10px 14px;
+      margin: 15px 0;
+    }
+  </style>
+</head>
+<body>
+
+<h1>MeanFlow Report</h1>
+
+<p>
+This report explains what I implemented, how I understand MeanFlow, the main design decisions and issues I considered,
+the three-image overfit result, and my attempted bonus experiment.
+</p>
+
+<h2>1. What I did</h2>
+
+<p>
+I implemented a small MeanFlow pipeline for image generation. The main required task was to overfit only three fixed
+training images and then show that one-step generation can reproduce those same images.
+</p>
+
+<pre><code>python train_overfit.py</code></pre>
+
+<p>
+The script loads the data, selects three fixed images, trains the MeanFlow model on those images, saves the checkpoint,
+plots the loss curve, and saves the original-vs-generated image comparison.
+</p>
+
+<p>Expected outputs:</p>
+
+<ul>
+  <li><code>checkpoints/meanflow_3_image_overfit.pt</code></li>
+  <li><code>outputs/loss_curve_3_image_overfit.png</code></li>
+  <li><code>outputs/original_vs_generated_3_image_overfit.png</code></li>
+</ul>
+
+<h2>2. How MeanFlow works in my own words</h2>
+
+<p>
+My understanding is that MeanFlow helps generate an image using a one-step procedure. Instead of taking many small
+denoising steps, it learns the average velocity between two time stamps. This average velocity tells the model how to
+move from a noisy point toward a clean image.
+</p>
+
+<p>
+In simple words, MeanFlow asks the question: at this noisy point <code>z_t</code>, how should I move so that I go
+toward the clean image?
+</p>
+
+<p>
+The noisy point is created by mixing the clean image <code>x</code> with Gaussian noise <code>epsilon</code>:
+</p>
+
+<pre><code>z_t = (1 - t) x + t epsilon</code></pre>
+
+<p>
+Here, <code>t = 0</code> means the clean image and <code>t = 1</code> means pure noise.
+The velocity from the clean image to the noise is:
+</p>
+
+<pre><code>v = epsilon - x</code></pre>
+
+<p>
+MeanFlow does not only learn this instantaneous velocity. It learns an average velocity between two time points
+<code>r</code> and <code>t</code>. The objective also includes a JVP term, which accounts for how the predicted
+average velocity changes with time.
+</p>
+
+<pre><code>u_target = v - (t - r) * JVP term</code></pre>
+
+<p>
+During generation, we start from noise, use <code>r = 0</code> and <code>t = 1</code>, predict the average velocity,
+and then take one step:
+</p>
+
+<pre><code>x_generated = z - u(z, 0, 1)</code></pre>
+
+<p>
+So the final generation process is only one model forward pass and one update step.
+</p>
+
+<div class="note">
+The following iPad notes reflect my own understanding of MeanFlow. I wrote and derived these notes myself while
+working through the identity, the average velocity idea, and the JVP term. I am attaching them in order to show the
+math reasoning behind my implementation, not just the final code.
+</div>
+
+<h3>iPad derivation notes</h3>
+
+<p><strong>Note 1</strong></p>
+<img src="notes_photo/mf1.jpeg" alt="MeanFlow handwritten note 1">
+
+<p><strong>Note 2</strong></p>
+<img src="notes_photo/mf2.jpeg" alt="MeanFlow handwritten note 2">
+
+<p><strong>Note 3</strong></p>
+<img src="notes_photo/mf3.jpeg" alt="MeanFlow handwritten note 3">
+
+<p><strong>Note 4</strong></p>
+<img src="notes_photo/mf4.jpeg" alt="MeanFlow handwritten note 4">
+
+<p><strong>Note 5</strong></p>
+<img src="notes_photo/mf5.jpeg" alt="MeanFlow handwritten note 5">
+
+<h2>3. Problems / issues I considered and how I handled them</h2>
+
+<p>
+For the three-image overfit experiment, I did not face many major problems because the setup was small and controlled.
+But I did think about a few important design and stability issues.
+</p>
+
+<h3>Time representation</h3>
+
+<p>
+Instead of passing time only as a scalar, I used sinusoidal time embeddings. This gives the model a richer
+representation of time and helps it understand different values of <code>r</code>, <code>t</code>, and
+<code>t - r</code>.
+</p>
+
+<h3>Sampling r and t</h3>
+
+<p>
+Since MeanFlow learns average velocity between two time points, the sampling of <code>r</code> and <code>t</code>
+matters. I sampled two random times and sorted them so that <code>r &lt;= t</code>. I also included cases where
+<code>r = t</code>, which helps connect the objective to the normal velocity case.
+</p>
+
+<h3>JVP and numerical stability</h3>
+
+<p>
+The JVP term is important but can also make training more sensitive. I handled this by using PyTorch's JVP support,
+detaching the target before the loss, and using gradient clipping. These choices help avoid unstable updates.
+</p>
+
+<h2>4. Three-image overfit result</h2>
+
+<p>
+The required result was to overfit three training examples and show that one-step generation reproduces them.
+The figure below shows the original images and the generated images.
+</p>
+
+<img src="outputs/original_vs_generated_3_image_overfit.png" alt="Original versus generated images">
+
+<p>
+The loss curve for the three-image overfit run is shown below.
+</p>
+
+<img src="outputs/loss_curve_3_image_overfit.png" alt="Loss curve">
+
+<h2>5. Ideal / bonus experiment attempt</h2>
+
+<p>
+The ideal bonus part was to train on a 10-class subset and show that one-step samples on the training set look
+reasonable. I attempted this, but I was not able to get a good enough output. So I am attaching the notebook and the
+outputs below to show my attempt honestly.
+</p>
+
+<h3>10-class training loss</h3>
+
+<p>
+The loss curve from my 10-class subset attempt is shown below.
+</p>
+
+<img src="ten_class_loss/ten_class_loss.png" alt="10-class subset training loss">
+
+<h3>10-class generated samples</h3>
+
+<p>
+The generated samples from the 10-class subset attempt are shown below.
+</p>
+
+<p><strong>Generated sample 1</strong></p>
+<img src="ten_class_generated/g1.png" alt="10-class generated sample 1">
+
+<p><strong>Generated sample 2</strong></p>
+<img src="ten_class_generated/g2.png" alt="10-class generated sample 2">
+
+<p><strong>Generated sample 3</strong></p>
+<img src="ten_class_generated/g3.png" alt="10-class generated sample 3">
+
+<p><strong>Generated sample 4</strong></p>
+<img src="ten_class_generated/g4.png" alt="10-class generated sample 4">
+
+<p><strong>Generated sample 5</strong></p>
+<img src="ten_class_generated/g5.png" alt="10-class generated sample 5">
+
+<p>
+The outputs were not improving enough to claim this as a successful bonus result. After seeing this, I tried the
+following changes to improve the 10-class experiment:
+</p>
+
+<ol>
+  <li>Remapping labels to <code>0..9</code>.</li>
+  <li>Using sinusoidal time embeddings.</li>
+  <li>Increasing endpoint sampling for <code>r = 0, t = 1</code>.</li>
+  <li>Trying <code>64x64</code> images.</li>
+  <li>Increasing model capacity.</li>
+  <li>Training longer.</li>
+  <li>Using EMA for cleaner generation.</li>
+  <li>Adding an endpoint reconstruction auxiliary loss.</li>
+</ol>
+
+<p>
+I am including the notebook because it shows the changes I tried, even though the final samples were not strong enough
+to claim the bonus result as successful.
+</p>
+
+<h2>6. How to reproduce</h2>
+
+<p>
+To reproduce the required three-image overfit experiment:
+</p>
+
+<pre><code>git clone https://github.com/samarthsoni3002/LR1_MeanFlow.git
+cd LR1_MeanFlow
+
+python -m venv .venv
+
+# Windows
+.venv\Scripts\activate
+
+# macOS/Linux
+source .venv/bin/activate
+
+pip install -r requirements.txt
+python train_overfit.py</code></pre>
+
+<p>
+After running the script, the output images and loss curve should be saved in the <code>outputs/</code> folder.
+</p>
+
+<h2>7. Files attached</h2>
+
+<ul>
+  <li><code>report.html</code></li>
+  <li><code>outputs/original_vs_generated_3_image_overfit.png</code></li>
+  <li><code>outputs/loss_curve_3_image_overfit.png</code></li>
+  <li><code>notes_photo/mf1.jpeg</code> to <code>notes_photo/mf5.jpeg</code></li>
+  <li><code>ten_class_loss/ten_class_loss.png</code></li>
+  <li><code>ten_class_generated/g1.png</code> to <code>ten_class_generated/g5.png</code></li>
+  <li>Bonus attempt notebook</li>
+</ul>
+
+</body>
+</html>
