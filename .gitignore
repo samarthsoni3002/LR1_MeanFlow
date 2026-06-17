@@ -1,1 +1,5 @@
 .venv
+data
+imagenette2-160.tgz
+imagenette2-160
+checkpoints 
