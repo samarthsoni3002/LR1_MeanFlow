@@ -149,3 +149,13 @@ Plot of training loss across optimization steps.
 Side-by-side comparison of the original three selected images and the generated images produced by the trained model.
 
 ---
+
+## Project Report
+
+The detailed HTML report for this project is hosted here:
+
+https://samarthsoni3002.github.io/LR1_MeanFlow/report.html
+
+The report includes the explanation of the MeanFlow experiment, implementation details, issues faced during training, generated image results, and loss curves.
+
+---
