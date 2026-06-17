@@ -1,1 +1,145 @@
 # LR1_MeanFlow
+
+A small PyTorch implementation of a **MeanFlow-style image generation overfitting experiment**. The project downloads Imagenette, selects only three images, trains a small conditional U-Net to overfit those images, and saves the training outputs automatically.
+
+The main entry point is:
+
+```bash
+python train_overfit.py
+```
+
+Running this script handles the full experiment: data download, preprocessing, model training, checkpoint saving, loss-curve plotting, and original-vs-generated image visualization.
+
+---
+
+## Repository Structure
+
+```text
+LR1_MeanFlow/
+│
+├── meanflow/
+│   ├── data.py          # Imagenette download, transforms, 3-image dataset, dataloader
+│   ├── loss.py          # MeanFlow loss and r/t time sampling
+│   ├── model.py         # MeanFlowUNet model
+│   └── utils.py         # Plotting utilities
+│
+├── outputs/             # Saved plots/images after training
+├── train_overfit.py     # Main reproduction script
+├── sample.py            # Extra sampling script, if needed
+├── requirements.txt     # Python dependencies
+└── README.md
+```
+
+---
+
+## What This Experiment Does
+
+`train_overfit.py` performs the following steps:
+
+1. Creates `outputs/` and `checkpoints/` folders if they do not already exist.
+2. Uses GPU if CUDA is available; otherwise uses CPU.
+3. Downloads and extracts the `imagenette2-160` dataset if it is not already present.
+4. Resizes images to `32 x 32`.
+5. Selects only **three images**, one from each of three different classes.
+6. Trains `MeanFlowUNet` for `5000` optimization steps.
+7. Saves the trained checkpoint.
+8. Saves the training loss curve.
+9. Generates samples from noise and saves an original-vs-generated comparison image.
+
+---
+
+## Requirements
+
+- Python 3.10+
+- PyTorch
+- torchvision
+- matplotlib
+- numpy
+- tqdm
+- Pillow
+
+The dependencies are listed in `requirements.txt`.
+
+---
+
+## Reproducing the Experiment
+
+### 1. Clone the repository
+
+```bash
+git clone https://github.com/samarthsoni3002/LR1_MeanFlow.git
+cd LR1_MeanFlow
+```
+
+### 2. Create a virtual environment
+
+#### Windows
+
+```bash
+python -m venv .venv
+.venv\Scripts\activate
+```
+
+#### macOS / Linux
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+```
+
+### 3. Install dependencies
+
+```bash
+pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+If you want GPU acceleration, make sure your installed `torch` and `torchvision` versions match your CUDA version. If the default install does not detect your GPU, install PyTorch using the command recommended on the official PyTorch installation page for your CUDA version.
+
+### 4. Run the experiment
+
+```bash
+python train_overfit.py
+```
+
+That is the main command needed to reproduce the run.
+
+---
+
+## Expected Outputs
+
+After running `train_overfit.py`, the repository should contain:
+
+```text
+checkpoints/
+└── meanflow_3_image_overfit.pt
+
+outputs/
+├── loss_curve_3_image_overfit.png
+└── original_vs_generated_3_image_overfit.png
+```
+
+The script may also create the Imagenette dataset files in the repository root:
+
+```text
+imagenette2-160.tgz
+imagenette2-160/
+```
+
+---
+
+## Output Description
+
+### `checkpoints/meanflow_3_image_overfit.pt`
+
+Saved PyTorch model weights after training.
+
+### `outputs/loss_curve_3_image_overfit.png`
+
+Plot of training loss across optimization steps.
+
+### `outputs/original_vs_generated_3_image_overfit.png`
+
+Side-by-side comparison of the original three selected images and the generated images produced by the trained model.
+
+---
