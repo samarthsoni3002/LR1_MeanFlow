@@ -44,3 +44,5 @@ def plot_original_vs_generated(originals, generated, save_path=None):
         plt.savefig(save_path, dpi=200, bbox_inches="tight")
 
     plt.show()
+    
+    

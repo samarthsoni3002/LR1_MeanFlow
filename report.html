@@ -168,6 +168,145 @@ The JVP term is important but can also make training more sensitive. I handled t
 detaching the target before the loss, and using gradient clipping. These choices help avoid unstable updates.
 </p>
 
+<h2>3.1. Changes made to make the 256x256 overfit work</h2>
+
+
+<h3>The image resolution was not actually 256x256</h3>
+
+<p>
+The first issue was that the earlier code was using a smaller image resolution. This meant that even if the model
+appeared to overfit, it did not fully satisfy the requirement of reproducing the three images at 256x256.
+</p>
+
+<p>
+To fix this, I changed the data pipeline to use the larger Imagenette version and explicitly resize/crop images to
+256x256:
+</p>
+
+<pre><code>url = "https://s3.amazonaws.com/fast-ai-imageclas/imagenette2-320.tgz"</code></pre>
+
+<p>
+I also added shape checks so that the experiment explicitly verifies the input and generated image size:
+</p>
+
+<pre><code>assert selected_images.shape == (3, 3, 256, 256)
+assert x_orig.shape[-2:] == (256, 256)
+assert x_gen.shape == x_orig.shape</code></pre>
+
+
+<h3>The model was too small for clean 256x256 memorization</h3>
+
+<p>
+Overfitting three 256x256 images is harder than overfitting small images because the model has to memorize more pixel
+detail and spatial structure. The smaller model could learn rough shapes but did not reproduce the images clearly
+enough.
+</p>
+
+<p>
+To improve this, I increased the model capacity:
+</p>
+
+<pre><code>base_channels = 64
+time_emb_dim = 128</code></pre>
+
+<p>
+This gave the model more capacity while still keeping the training possible on my available compute.
+</p>
+
+<h3>The model needed spatial position information</h3>
+
+<p>
+Since the task is to memorize only three fixed images, exact spatial location matters. A convolutional model alone does
+not explicitly know absolute pixel position, so I added coordinate channels to the input.
+</p>
+
+<p>
+For each input tensor, I concatenate two extra channels containing normalized x and y coordinates in the range
+<code>[-1, 1]</code>:
+</p>
+
+<pre><code>z = add_coord_channels(z)</code></pre>
+
+<p>
+Because of this, the first convolution was changed from:
+</p>
+
+<pre><code>nn.Conv2d(img_channels, base_channels, kernel_size=3, padding=1)</code></pre>
+
+<p>
+to:
+</p>
+
+<pre><code>nn.Conv2d(img_channels + 2, base_channels, kernel_size=3, padding=1)</code></pre>
+
+<p>
+This helped the model memorize the fixed spatial layout of the three images more reliably.
+</p>
+
+<h3>The JVP-based MeanFlow loss was sensitive during training</h3>
+
+<p>
+The MeanFlow objective uses a JVP term, so training can be more sensitive than a simple reconstruction loss. To make the
+training more stable, I used several stabilizing choices.
+</p>
+
+<ul>
+  <li>I sampled two random time values and sorted them so that <code>r &lt;= t</code>.</li>
+  <li>I included some cases where <code>r = t</code>, which reduces the target to the normal flow-matching case.</li>
+  <li>I used <code>torch.func.jvp</code> to compute the JVP term directly.</li>
+  <li>I detached the MeanFlow target before computing the loss.</li>
+  <li>I used gradient clipping to avoid unstable updates.</li>
+</ul>
+
+<p>
+The final loss used in the submitted three-image overfit run was:
+</p>
+
+<pre><code>u_tgt = v - (t - r) * dudt
+loss = ((u - u_tgt.detach()) ** 2).mean()</code></pre>
+
+<p>
+I did not use endpoint reconstruction loss in the final 256x256 result. I initially used endpoint-style reconstruction
+as a debugging experiment because it made the images easier to memorize, but I removed it from the final run so that the
+reported result reflects the MeanFlow JVP objective directly.
+</p>
+
+<h3>The 256x256 experiment needed longer training</h3>
+
+<p>
+The 256x256 version required more optimization steps than the smaller-resolution version. Therefore, I trained the model
+for longer:
+</p>
+
+<pre><code>num_steps = 20000
+lr = 3e-4</code></pre>
+
+<p>
+This gave the model enough time to memorize the three fixed training images using the MeanFlow objective.
+</p>
+
+<h3>Final 256x256 setup</h3>
+
+<p>
+After these changes, the final three-image overfit experiment used:
+</p>
+
+<ul>
+  <li><code>imagenette2-320</code> as the source dataset.</li>
+  <li><code>Resize(256)</code> and <code>CenterCrop(256)</code>.</li>
+  <li>Exactly three fixed training images.</li>
+  <li>A conditional U-Net with <code>base_channels=64</code> and <code>time_emb_dim=128</code>.</li>
+  <li>Coordinate channels added to the image/noise input.</li>
+  <li>The pure MeanFlow JVP objective without endpoint reconstruction loss.</li>
+  <li>One-step sampling using <code>x_generated = z - u(z, 0, 1)</code>.</li>
+</ul>
+
+<p>
+With this final setup, the model produced recognizable 256x256 one-step generations for the three training examples.
+This shows that the data pipeline, MeanFlow loss, JVP target, and one-step sampler are working end-to-end for the
+required overfit sanity check.
+</p>
+
 <h2>4. Three-image overfit result</h2>
 
 <p>
@@ -183,6 +322,35 @@ The loss curve for the three-image overfit run is shown below.
 
 <img src="outputs/loss_curve_3_image_overfit.png" alt="Loss curve">
 
+<h2>4.1. Corrected 256x256 overfit result</h2>
+
+<p>
+After the earlier lower-resolution overfit experiment, I reran the required sanity check using the corrected 256x256
+setup. In this corrected run, the data pipeline, model, and sampler were all aligned with 256x256 images, so the
+experiment directly matches the intended task more closely.
+</p>
+
+<p>
+The figure below shows the final 256x256 three-image overfit result. The generated outputs are recognizable versions of
+the training images, which indicates that the MeanFlow objective, JVP target construction, and one-step sampler are
+working end-to-end on the required overfit setting.
+</p>
+
+<img src="outputs/output_256.png" alt="256x256 MeanFlow three-image overfit result">
+
+<p>
+The corresponding loss curve for the 256x256 run is shown below.
+</p>
+
+<img src="outputs/loss_256.png" alt="256x256 MeanFlow loss curve">
+
+<p>
+In this corrected experiment, both the selected training images and generated samples had shape
+<code>[3, 3, 256, 256]</code>. I also used the pure MeanFlow loss in this final run, without auxiliary endpoint
+reconstruction loss. Compared with the earlier lower-resolution setup, this 256x256 version is the final result I use
+for the required three-image overfit sanity check.
+</p>
+
 <h2>5. Ideal / bonus experiment attempt</h2>
 
 <p>
@@ -190,6 +358,7 @@ The ideal bonus part was to train on a 10-class subset and show that one-step sa
 reasonable. I attempted this, but I was not able to get a good enough output. So I am attaching the notebook and the
 outputs below to show my attempt honestly.
 </p>
+
 
 <h3>10-class training loss</h3>
 

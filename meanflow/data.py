@@ -19,7 +19,7 @@ class ImageDataset(Dataset):
         return self.images[idx], self.labels[idx]
 
 
-def get_transform(image_size=32):
+def get_transform(image_size=256):
     return transforms.Compose([
         transforms.Resize((image_size, image_size)),
         transforms.ToTensor(),
@@ -27,14 +27,14 @@ def get_transform(image_size=32):
     ])
 
 
-def load_imagenette(image_size=32):
+def load_imagenette(image_size=256):
     
     data_dir = Path("./")
     data_dir.mkdir(parents=True,exist_ok=True)
     
-    url = "https://s3.amazonaws.com/fast-ai-imageclas/imagenette2-160.tgz"
-    tar_path = data_dir / "imagenette2-160.tgz"
-    extract_path = data_dir /"imagenette2-160"
+    url = "https://s3.amazonaws.com/fast-ai-imageclas/imagenette2-320.tgz"
+    tar_path = data_dir / "imagenette2-320.tgz"
+    extract_path = data_dir /"imagenette2-320"
 
     if not extract_path.exists():
         print("Downloading ImageNette")

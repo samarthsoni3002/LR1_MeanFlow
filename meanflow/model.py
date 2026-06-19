@@ -4,6 +4,20 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
+def add_coord_channels(z):
+    B, C, H, W = z.shape
+    device = z.device
+    dtype = z.dtype
+
+    y_coords = torch.linspace(-1, 1, H, device=device, dtype=dtype)
+    x_coords = torch.linspace(-1, 1, W, device=device, dtype=dtype)
+
+    yy, xx = torch.meshgrid(y_coords, x_coords, indexing="ij")
+
+    xx = xx[None, None, :, :].expand(B, 1, H, W)
+    yy = yy[None, None, :, :].expand(B, 1, H, W)
+
+    return torch.cat([z, xx, yy], dim=1)
 
 class SinusoidalEmbedding(nn.Module):
 
@@ -70,7 +84,7 @@ class MeanFlowUNet(nn.Module):
         self,
         img_channels=3,
         base_channels=64,
-        time_emb_dim=64,
+        time_emb_dim=128,
         num_classes=3,
     ):
         super().__init__()
@@ -85,7 +99,7 @@ class MeanFlowUNet(nn.Module):
 
         self.label_embed = nn.Embedding(num_classes, time_emb_dim)
 
-        self.in_conv = nn.Conv2d(img_channels, base_channels, kernel_size=3, padding=1)
+        self.in_conv = nn.Conv2d(img_channels + 2, base_channels, kernel_size=3, padding=1)
 
         self.res1 = ResBlock(base_channels, base_channels, time_emb_dim)
         self.down1 = nn.Conv2d(base_channels, base_channels * 2, kernel_size=4, stride=2, padding=1)
@@ -116,6 +130,8 @@ class MeanFlowUNet(nn.Module):
 
         if y is not None:
             temb = temb + self.label_embed(y)
+            
+        z = add_coord_channels(z)
 
         h1 = self.in_conv(z)
         h1 = self.res1(h1, temb)
