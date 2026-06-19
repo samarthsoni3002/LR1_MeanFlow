@@ -218,6 +218,18 @@ Side-by-side comparison of the original three selected 256x256 images and the ge
 
 ---
 
+## Project Report
+
+The detailed HTML report for this project is hosted here:
+
+https://samarthsoni3002.github.io/LR1_MeanFlow/report.html
+
+The report includes the explanation of the MeanFlow experiment, implementation details, issues faced during training, generated image results, and loss curves.
+
+---
+
+---
+
 ## Notes on the 256x256 Fix
 
 The original implementation used a smaller image resolution. I updated the pipeline to correctly run the required 256x256 overfit experiment.
